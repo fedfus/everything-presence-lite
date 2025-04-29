@@ -43,6 +43,7 @@ i2c:
 
 light:
   - platform: status_led
+    id: esp32_led
     name: ESP32 LED
     pin: GPIO4
     internal: False
