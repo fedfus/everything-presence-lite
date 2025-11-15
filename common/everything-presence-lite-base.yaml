@@ -5,7 +5,7 @@ esphome:
   name_add_mac_suffix: True
   project: 
     name: EverythingSmartTechnology.Everything Presence Lite
-    version: "1.2.4"
+    version: "1.3.1"
 
 esp32:
   board: esp32dev
@@ -44,6 +44,7 @@ light:
     pin: GPIO14
     internal: False
     restore_mode: ALWAYS_OFF
+    entity_category: config
 
 number:
   - platform: template
@@ -70,8 +71,10 @@ sensor:
     i2c_id: bus_a
     address: 0x23
     update_interval: ${illuminance_update_interval}
+    accuracy_decimals: 1
     filters:
       - lambda: "return x + id(illuminance_offset_ui).state;"
+      - delta: 5%
       - clamp:
           min_value: 0
 
@@ -82,9 +85,15 @@ binary_sensor:
       inverted: true
     id: flash_button
     internal: True
+    filters:
+      - delayed_on: 50ms 
     on_multi_click:
       - timing:
-        - ON for at least 10s
+          - ON for 0.2s to 3s
+          - OFF for 0.1s to 2s
+          - ON for 0.2s to 3s
+          - OFF for 0.1s to 2s
+          - ON for at least 5s 
         then:
           - repeat: 
               count: 5
@@ -100,6 +109,7 @@ button:
   - platform: restart
     icon: mdi:power-cycle
     name: "ESP Reboot"
+    entity_category: config
   - platform: factory_reset
     id: "factory_reset_button"
     internal: True
