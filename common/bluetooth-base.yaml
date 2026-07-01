@@ -7,3 +7,74 @@ bluetooth_proxy:
 
 esp32_improv:
   authorizer: none
+
+# BLE is delayed on boot so
+# the update check has enough memory, then enabled once the check completes.
+esp32_ble:
+  enable_on_boot: false
+
+esphome:
+  on_boot:
+    priority: -100
+    then:
+      - if:
+          condition:
+            lambda: 'return !wifi::global_wifi_component->has_sta();'
+          then:
+            - logger.log: "No WiFi credentials configured, enabling BLE for Improv setup"
+            - ble.enable
+
+wifi:
+  on_connect:
+    - delay: 15s
+    - if:
+        condition:
+          ble.enabled:
+        then:
+          - esp32_ble_tracker.stop_scan:
+          - delay: 5s
+          - ble.disable
+          - delay: 5s
+    - component.update: update_http_request
+    - delay: 10s
+    - lambda: |-
+        if (id(update_http_request).status_has_error()) {
+          id(update_http_request).status_clear_error();
+        }
+    - ble.enable
+    - delay: 5s
+    - esp32_ble_tracker.start_scan:
+        continuous: true
+
+interval:
+  # Clear stuck error flags that fail because BLE is running.
+  - interval: 30s
+    then:
+      - lambda: |-
+          if (id(update_http_request).status_has_error()) {
+            id(update_http_request).status_clear_error();
+          }
+  - interval: 6h
+    then:
+      - if:
+          condition:
+            wifi.connected:
+          then:
+            - if:
+                condition:
+                  ble.enabled:
+                then:
+                  - esp32_ble_tracker.stop_scan:
+                  - delay: 5s
+                  - ble.disable
+                  - delay: 5s
+            - component.update: update_http_request
+            - delay: 10s
+            - lambda: |-
+                if (id(update_http_request).status_has_error()) {
+                  id(update_http_request).status_clear_error();
+                }
+            - ble.enable
+            - delay: 5s
+            - esp32_ble_tracker.start_scan:
+                continuous: true

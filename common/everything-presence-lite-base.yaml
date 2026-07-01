@@ -3,14 +3,31 @@ esphome:
   comment: Everything Presence Lite
   friendly_name: ${friendly_name}
   name_add_mac_suffix: True
-  project: 
+  project:
     name: EverythingSmartTechnology.Everything Presence Lite
-    version: "1.2.3"
+    version: "1.5.0"
+  on_boot:
+    priority: -100
+    then:
+      - lambda: |-
+          if (std::string("${ device_config.bluetooth_enabled | lower }") == "true") {
+            id(firmware_ble).publish_state("Enabled");
+          } else {
+            id(firmware_ble).publish_state("Disabled");
+          }
+
+          if (std::string("${ device_config.co2_enabled | lower }") == "true") {
+            id(firmware_co2).publish_state("Enabled");
+          } else {
+            id(firmware_co2).publish_state("Disabled");
+          }
 
 esp32:
   board: esp32dev
   framework:
     type: esp-idf
+    advanced:
+      sram1_as_iram: true
 
 # Enable logging
 logger:
@@ -18,6 +35,43 @@ logger:
 
 # Enable Home Assistant API
 api:
+  actions:
+    - action: set_update_manifest
+      variables:
+        url: string
+      then:
+        - lambda: |-
+            ESP_LOGI("fw", "Setting update manifest URL: %s", url.c_str());
+            #ifdef USE_ESP32_BLE
+            if (esp32_ble::global_ble && esp32_ble::global_ble->is_active()) {
+              ESP_LOGI("fw", "Disabling BLE for firmware update");
+              esp32_ble::global_ble->disable();
+            }
+            #endif
+            id(update_http_request).set_source_url(url);
+        - delay: 5s
+        - component.update: update_http_request
+        - delay: 1s
+        - update.perform:
+            id: update_http_request
+            force_update: true
+        - lambda: |-
+            #ifdef USE_ESP32_BLE
+            if (esp32_ble::global_ble) {
+              esp32_ble::global_ble->enable();
+            }
+            #endif
+    - action: get_build_flags
+      then:
+        - api.respond:
+            data: !lambda |-
+              root["ethernet_enabled"]  = ${ device_config.ethernet_enabled | lower };
+              root["co2_enabled"]       = ${ device_config.co2_enabled | lower };
+              root["bluetooth_enabled"] = ${ device_config.bluetooth_enabled | lower };
+              root["board_revision"]    = "${ device_config.board_revision }";
+              root["sensor_variant"]    = "${ device_config.sensor_variant }";
+              root["firmware_channel"]  = "${ device_config.firmware_channel }";
+              root["model"]             = "${ device_config.model }";
 
 ota:
   - platform: esphome
@@ -44,6 +98,7 @@ light:
     pin: GPIO14
     internal: False
     restore_mode: ALWAYS_OFF
+    entity_category: config
 
 number:
   - platform: template
@@ -70,8 +125,12 @@ sensor:
     i2c_id: bus_a
     address: 0x23
     update_interval: ${illuminance_update_interval}
+    accuracy_decimals: 0
     filters:
       - lambda: "return x + id(illuminance_offset_ui).state;"
+      - or:
+        - delta: 5%
+        - delta: 5
       - clamp:
           min_value: 0
 
@@ -82,9 +141,15 @@ binary_sensor:
       inverted: true
     id: flash_button
     internal: True
+    filters:
+      - delayed_on: 50ms 
     on_multi_click:
       - timing:
-        - ON for at least 10s
+          - ON for 0.2s to 3s
+          - OFF for 0.1s to 2s
+          - ON for 0.2s to 3s
+          - OFF for 0.1s to 2s
+          - ON for at least 5s 
         then:
           - repeat: 
               count: 5
@@ -100,6 +165,83 @@ button:
   - platform: restart
     icon: mdi:power-cycle
     name: "ESP Reboot"
+    entity_category: config
+  - platform: template
+    name: "Apply Update"
+    entity_category: diagnostic
+    on_press:
+      - logger.log: "Applying firmware update based on selected configuration"
+      # Disable BLE if running
+      - lambda: |-
+          #ifdef USE_ESP32_BLE
+          if (esp32_ble::global_ble && esp32_ble::global_ble->is_active()) {
+            ESP_LOGI("firmware", "Disabling BLE for firmware update");
+            esp32_ble::global_ble->disable();
+          }
+          #endif
+      - delay: 5s
+      - lambda: |-
+          std::string base_url = "https://everythingsmarthome.github.io/everything-presence-lite/everything-presence-lite-ha";
+          std::string variant = "${device_config.sensor_variant}";
+          if (variant == "ld2450") {
+            variant.clear();
+          }
+
+          if (!variant.empty()) {
+            base_url += "-";
+            base_url += variant;
+          }
+
+          if (id(firmware_ble).current_option() == "Disabled") {
+            base_url += "-no-ble";
+          }
+
+          if (id(firmware_co2).current_option() == "Enabled") {
+            base_url += "-co2";
+          }
+
+          base_url += "-manifest.json";
+
+          ESP_LOGI("firmware", "Switching to manifest: %s", base_url.c_str());
+          id(update_http_request).set_source_url(base_url.c_str());
+      - component.update: update_http_request
+      - delay: 2s
+      - update.perform:
+          id: update_http_request
+          force_update: true
+      # Re-enable BLE if it was available
+      - lambda: |-
+          #ifdef USE_ESP32_BLE
+          if (esp32_ble::global_ble) {
+            ESP_LOGI("firmware", "Re-enabling BLE after firmware update");
+            esp32_ble::global_ble->enable();
+          }
+          #endif
   - platform: factory_reset
     id: "factory_reset_button"
     internal: True
+
+select:
+  - platform: template
+    id: firmware_ble
+    name: Bluetooth Proxy
+    icon: "mdi:bluetooth"
+    entity_category: diagnostic
+    optimistic: true
+    restore_value: true
+    options:
+      - "Disabled"
+      - "Enabled"
+    initial_option: "Disabled"
+
+  - platform: template
+    id: firmware_co2
+    name: CO2 Sensor
+    icon: "mdi:molecule-co2"
+    entity_category: diagnostic
+    optimistic: true
+    restore_value: true
+    options:
+      - "Disabled"
+      - "Enabled"
+    initial_option: "Disabled"
