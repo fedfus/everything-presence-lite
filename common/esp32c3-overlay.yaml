@@ -1,0 +1,58 @@
+# =============================================================================
+# ESP32-C3 hardware overlay (Seeed Studio XIAO ESP32-C3)
+# -----------------------------------------------------------------------------
+# Fork-only file: applies the XIAO ESP32-C3 hardware delta on top of the
+# UNTOUCHED upstream packages (everything-presence-lite-base.yaml,
+# ld2450-base.yaml). Keep ONLY hardware differences here so that
+# `git merge upstream/main` stays conflict-free.
+#
+# Pin map (XIAO ESP32-C3 vs original EP Lite ESP32):
+#   I2C SDA/SCL : 6/7   (was 21/22)
+#   Status LED  : GPIO4 (was GPIO14)
+#   LD2450 UART : TX GPIO21 / RX GPIO20 (was 17/16)
+# =============================================================================
+
+esphome:
+  platformio_options:
+    board_build.flash_mode: dio
+    board_build.mcu: esp32c3
+
+esp32:
+  board: esp32-c3-devkitm-1
+  variant: esp32c3
+  framework:
+    type: esp-idf
+    # sram1_as_iram (set upstream) is ESP32-classic only
+    advanced: !remove
+
+i2c:
+  - id: !extend bus_a
+    sda: 6
+    scl: 7
+
+light:
+  - id: !extend esp32_led
+    pin: GPIO4
+
+uart:
+  tx_pin:
+    number: GPIO21
+    mode:
+      input: true
+      pullup: true
+  rx_pin:
+    number: GPIO20
+    mode:
+      input: true
+      pullup: true
+
+# The upstream flash/factory-reset button sits on GPIO0. On the XIAO the
+# BOOT button is GPIO9 instead; uncomment to use it:
+# binary_sensor:
+#   - id: !extend flash_button
+#     pin:
+#       number: 9
+#       inverted: true
+#       mode:
+#         input: true
+#         pullup: true

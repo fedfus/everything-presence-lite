@@ -1,0 +1,91 @@
+# =============================================================================
+# Pipeline GitLab (self-hosted) — build firmware ESP32-C3 + pubblicazione OTA
+# -----------------------------------------------------------------------------
+# - validate : `esphome config` su ogni variante (tutti i branch/MR)
+# - build    : `esphome compile` + packaging firmware/manifest (solo main/tag)
+# - pages    : pubblica firmware + manifest.json su GitLab Pages
+#
+# I dispositivi fanno OTA leggendo:
+#   <GitLab Pages URL>/<variante>/manifest.json
+# (vedi substitution `ota_base_url` nei file *-esp32c3.yaml)
+#
+# Requisiti sull'istanza GitLab:
+# - runner con executor docker e accesso internet (toolchain platformio)
+# - GitLab Pages abilitato, con access control DISATTIVATO per questo
+#   progetto (Settings > General > Visibility: Pages "Everyone"), perché
+#   i device ESPHome non possono autenticarsi.
+# =============================================================================
+
+stages:
+  - validate
+  - build
+  - deploy
+
+variables:
+  PLATFORMIO_CORE_DIR: "$CI_PROJECT_DIR/.platformio"
+
+.esphome-variant:
+  image:
+    name: ghcr.io/esphome/esphome:stable
+    entrypoint: [""]
+  parallel:
+    matrix:
+      - VARIANT:
+          - everything-presence-lite-ha-esp32c3
+          - everything-presence-lite-ha-no-ble-esp32c3
+
+validate:
+  stage: validate
+  extends: .esphome-variant
+  script:
+    - esphome config "${VARIANT}.yaml" > /dev/null
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+build:
+  stage: build
+  extends: .esphome-variant
+  cache:
+    key: esphome-build
+    paths:
+      - .esphome/
+      - .platformio/
+  script:
+    - esphome compile "${VARIANT}.yaml"
+    - bash scripts/gitlab/package-firmware.sh "${VARIANT}"
+  artifacts:
+    paths:
+      - output/
+    expire_in: 4 weeks
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+
+pages:
+  stage: deploy
+  image: alpine:latest
+  needs: ["build"]
+  script:
+    - mkdir -p public
+    - cp -r output/* public/
+    - bash scripts/gitlab/generate-index.sh public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Job schedulato (Settings > CI/CD > Pipeline schedules, es. settimanale):
+# fallisce se l'upstream GitHub ha commit nuovi -> notifica di sync necessario.
+check-upstream:
+  stage: validate
+  image: alpine/git:latest
+  script:
+    - git remote add upstream https://github.com/EverythingSmartHome/everything-presence-lite.git || true
+    - git fetch upstream main
+    - BEHIND=$(git rev-list --count HEAD..upstream/main)
+    - echo "Commit upstream non ancora integrati - $BEHIND"
+    - test "$BEHIND" -eq 0 || (echo "Esegui scripts/sync-upstream.sh" && exit 1)
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
