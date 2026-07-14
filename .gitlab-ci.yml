@@ -47,7 +47,7 @@ build:
   stage: build
   extends: .esphome-variant
   cache:
-    key: esphome-build
+    key: "esphome-${VARIANT}"
     paths:
       - .esphome/
       - .platformio/
