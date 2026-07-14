@@ -9,9 +9,9 @@ substitutions:
   # Bump fork_version to publish a new OTA release to the devices.
   # Convention: <upstream project version>+c3.<n>
   fork_version: "1.5.0+c3.1"
-  # Base URL where the GitLab pipeline publishes firmware + manifests
-  # (GitLab Pages of your private instance). CHANGE ME:
-  ota_base_url: "https://epl.pages.gitlab.local/everything-presence-lite"
+  # Placeholder: l'URL reale viene iniettato dalla pipeline GitLab
+  # (esphome -s ota_base_url $CI_PAGES_URL). Non committare URL privati qui.
+  ota_base_url: "http://ota.invalid/everything-presence-lite"
   # ---------------------------------------------------------------------------
 
   device_config:

@@ -52,7 +52,9 @@ build:
       - .esphome/
       - .platformio/
   script:
-    - esphome compile "${VARIANT}.yaml"
+    # L'URL OTA reale non e' mai committato: viene iniettato qui.
+    # Default: URL Pages del progetto; override con la variabile CI OTA_BASE_URL.
+    - esphome -s ota_base_url "${OTA_BASE_URL:-$CI_PAGES_URL}" compile "${VARIANT}.yaml"
     - bash scripts/gitlab/package-firmware.sh "${VARIANT}"
   artifacts:
     paths:

@@ -36,8 +36,10 @@ rinomina, il job `validate` della pipeline fallisce e l'overlay va ritoccato.
 ## Release OTA
 
 1. (Dopo un sync o una modifica) aggiorna `fork_version` nei due file `*-esp32c3.yaml`
-2. Imposta `ota_base_url` (una volta sola) con l'URL GitLab Pages del progetto,
-   es. `https://<pages-host>/<gruppo>/everything-presence-lite`
+2. L'URL OTA non è committato: la pipeline lo inietta a build time
+   (`$CI_PAGES_URL`, oppure la variabile CI `OTA_BASE_URL` se impostata in
+   Settings → CI/CD → Variables). Il repo — anche il mirror pubblico su
+   GitHub — contiene solo un placeholder
 3. Push su `main` del GitLab privato → la pipeline compila e pubblica su Pages:
    - `<ota_base_url>/<variante>/manifest.json`
    - `<ota_base_url>/<variante>/firmware.ota.bin` (OTA)
