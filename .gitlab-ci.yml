@@ -69,6 +69,7 @@ pages:
   image: alpine:latest
   needs: ["build"]
   script:
+    - apk add --no-cache bash 
     - mkdir -p public
     - cp -r output/* public/
     - bash scripts/gitlab/generate-index.sh public
