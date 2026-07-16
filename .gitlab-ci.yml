@@ -89,7 +89,9 @@ pages:
 # ruolo Maintainer, scope write_repository, masked).
 sync-github:
   stage: validate
-  image: alpine/git:latest
+  image:
+    name: alpine/git:latest
+    entrypoint: [""]
   variables:
     GIT_STRATEGY: clone
     GIT_DEPTH: "0"
