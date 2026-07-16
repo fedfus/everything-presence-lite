@@ -7,8 +7,17 @@ VARIANT="$1"
 YAML="${VARIANT}.yaml"
 
 NAME=$(sed -n 's/^  name: *"\(.*\)"/\1/p' "$YAML" | head -1)
-VERSION=$(sed -n 's/^  fork_version: *"\(.*\)"/\1/p' "$YAML" | head -1)
 FRIENDLY=$(sed -n 's/^  friendly_name: *"\(.*\)"/\1/p' "$YAML" | head -1)
+
+# Versione automatica: <versione upstream>+c3.<numero pipeline>.
+# Deve combaciare con la -s fork_version passata a `esphome compile` in CI.
+# Fallback sul fork_version committato quando si builda a mano.
+UP_VER=$(sed -n 's/.*version: *"\([0-9.]*\)".*/\1/p' common/everything-presence-lite-base.yaml | head -1)
+if [ -n "${CI_PIPELINE_IID:-}" ]; then
+  VERSION="${UP_VER}+c3.${CI_PIPELINE_IID}"
+else
+  VERSION=$(sed -n 's/^  fork_version: *"\(.*\)"/\1/p' "$YAML" | head -1)
+fi
 
 BUILD_DIR=".esphome/build/${NAME}/.pioenvs/${NAME}"
 OUT="output/${VARIANT}"

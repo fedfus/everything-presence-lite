@@ -54,7 +54,10 @@ build:
   script:
     # L'URL OTA reale non e' mai committato: viene iniettato qui.
     # Default: URL Pages del progetto; override con la variabile CI OTA_BASE_URL.
-    - esphome -s ota_base_url "${OTA_BASE_URL:-$CI_PAGES_URL}" compile "${VARIANT}.yaml"
+    # La versione firmware e' automatica: <versione upstream>+c3.<numero pipeline>,
+    # cosi' ogni build pubblicata risulta "nuova" per l'update entity dei device.
+    - UP_VER=$(sed -n 's/.*version:[ ]*"\([0-9.]*\)".*/\1/p' common/everything-presence-lite-base.yaml | head -1)
+    - esphome -s ota_base_url "${OTA_BASE_URL:-$CI_PAGES_URL}" -s fork_version "${UP_VER}+c3.${CI_PIPELINE_IID}" compile "${VARIANT}.yaml"
     - bash scripts/gitlab/package-firmware.sh "${VARIANT}"
   artifacts:
     paths:
@@ -79,16 +82,21 @@ pages:
   rules:
     - if: '$CI_COMMIT_BRANCH == "main"'
 
-# Job schedulato (Settings > CI/CD > Pipeline schedules, es. settimanale):
-# fallisce se l'upstream GitHub ha commit nuovi -> notifica di sync necessario.
-check-upstream:
+# Job schedulato (Settings > CI/CD > Pipeline schedules, es. giornaliero):
+# pulla il main dal fork GitHub (a sua volta sincronizzato dall'upstream via
+# GitHub Action) e lo pusha su questo repo. Il push fa partire build+pages.
+# Richiede la variabile CI/CD GITLAB_PUSH_TOKEN (project access token,
+# ruolo Maintainer, scope write_repository, masked).
+sync-github:
   stage: validate
   image: alpine/git:latest
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: "0"
   script:
-    - git remote add upstream https://github.com/EverythingSmartHome/everything-presence-lite.git || true
-    - git fetch upstream main
-    - BEHIND=$(git rev-list --count HEAD..upstream/main)
-    - echo "Commit upstream non ancora integrati - $BEHIND"
-    - test "$BEHIND" -eq 0 || (echo "Esegui scripts/sync-upstream.sh" && exit 1)
+    - git remote add github https://github.com/fedfus/everything-presence-lite.git
+    - git fetch github main
+    - '[ "$(git rev-list --count HEAD..github/main)" = "0" ] && echo "Già allineato" && exit 0'
+    - git push "https://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" github/main:main
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule"'

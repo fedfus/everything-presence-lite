@@ -1,0 +1,34 @@
+name: Sync upstream
+
+# Mantiene il fork allineato a EverythingSmartHome/everything-presence-lite.
+# In caso di conflitto il job fallisce (notifica email): risolvere in locale
+# con scripts/sync-upstream.sh e pushare.
+
+on:
+  schedule:
+    - cron: '0 5 * * *'   # ogni giorno alle 05:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Merge upstream/main
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@users.noreply.github.com"
+          git remote add upstream https://github.com/EverythingSmartHome/everything-presence-lite.git
+          git fetch upstream main
+          if [ "$(git rev-list --count HEAD..upstream/main)" = "0" ]; then
+            echo "Già allineato all'upstream."
+            exit 0
+          fi
+          git merge --no-edit upstream/main
+          git push origin main

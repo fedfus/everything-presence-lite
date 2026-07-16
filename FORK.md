@@ -15,19 +15,26 @@ I file upstream **non vengono mai modificati**. Tutto il delta del fork vive in:
 | `.gitlab-ci.yml`, `scripts/gitlab/` | Pipeline build + pubblicazione OTA |
 | `scripts/sync-upstream.sh` | Allineamento con l'upstream |
 
-## Sync con l'upstream
+## Sync con l'upstream (automatico)
 
-```bash
-./scripts/sync-upstream.sh
+Catena completamente automatica:
+
+```
+EPL upstream → (GitHub Action "Sync upstream", 05:00 UTC) → github/fedfus main
+             → (job GitLab "sync-github" schedulato)      → gitlab main
+             → pipeline build+pages                        → OTA ai device
 ```
 
-Fa fetch+merge di `upstream/main`. Poiché i file upstream sono intatti, il merge è
-normalmente senza conflitti. Dopo il merge lo script segnala se va aggiornata
-`fork_version` (convenzione: `<versione upstream>+c3.<n>`).
+- `.github/workflows/sync-upstream.yml`: merge giornaliero dell'upstream nel
+  fork GitHub. In caso di conflitto il job fallisce (email da GitHub).
+- job `sync-github` in `.gitlab-ci.yml`: gira su una Pipeline schedule
+  (consiglio: un'ora dopo la Action). Richiede la variabile CI/CD
+  `GITLAB_PUSH_TOKEN` (project access token, ruolo Maintainer, scope
+  `write_repository`, masked). Se i rami divergono il push fallisce → notifica.
 
-In alternativa, lo scheduled job `check-upstream` della pipeline (Settings →
-CI/CD → Pipeline schedules) fallisce quando l'upstream ha commit nuovi, così
-ricevi una notifica.
+Sync manuale (o risoluzione conflitti): `./scripts/sync-upstream.sh` in locale,
+poi push su GitHub (il GitLab si riallinea alla schedule successiva, o pushi
+anche lì direttamente).
 
 Unico punto di attenzione: l'overlay "aggancia" per id alcuni componenti
 upstream (`bus_a`, `esp32_led`, `uart_bus`, `flash_button`). Se upstream li
@@ -35,12 +42,14 @@ rinomina, il job `validate` della pipeline fallisce e l'overlay va ritoccato.
 
 ## Release OTA
 
-1. (Dopo un sync o una modifica) aggiorna `fork_version` nei due file `*-esp32c3.yaml`
+1. La versione firmware è automatica: `<versione upstream>+c3.<numero pipeline>`
+   (es. `1.5.0+c3.42`), calcolata dalla CI. Il `fork_version` committato nei
+   file `*-esp32c3.yaml` serve solo come fallback per le build manuali
 2. L'URL OTA non è committato: la pipeline lo inietta a build time
    (`$CI_PAGES_URL`, oppure la variabile CI `OTA_BASE_URL` se impostata in
    Settings → CI/CD → Variables). Il repo — anche il mirror pubblico su
    GitHub — contiene solo un placeholder
-3. Push su `main` del GitLab privato → la pipeline compila e pubblica su Pages:
+3. Push (o sync automatico) su `main` del GitLab → la pipeline compila e pubblica su Pages:
    - `<ota_base_url>/<variante>/manifest.json`
    - `<ota_base_url>/<variante>/firmware.ota.bin` (OTA)
    - `<ota_base_url>/<variante>/firmware.factory.bin` (flash via ESP Web Tools)
