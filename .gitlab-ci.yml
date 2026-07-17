@@ -40,6 +40,8 @@ validate:
   script:
     - esphome config "${VARIANT}.yaml" > /dev/null
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_COMMIT_BRANCH'
 
@@ -64,6 +66,9 @@ build:
       - output/
     expire_in: 4 weeks
   rules:
+    # niente rebuild dalle pipeline schedulate: si builda solo su push reale
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
     - if: '$CI_COMMIT_TAG'
 
@@ -80,6 +85,8 @@ pages:
     paths:
       - public
   rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
     - if: '$CI_COMMIT_BRANCH == "main"'
 
 # Job schedulato (Settings > CI/CD > Pipeline schedules, es. giornaliero):

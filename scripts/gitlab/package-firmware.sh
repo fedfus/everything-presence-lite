@@ -19,12 +19,23 @@ else
   VERSION=$(sed -n 's/^  fork_version: *"\(.*\)"/\1/p' "$YAML" | head -1)
 fi
 
-BUILD_DIR=".esphome/build/${NAME}/.pioenvs/${NAME}"
+# Il percorso di build cambia tra versioni ESPHome
+# (.pioenvs/<name>/ in passato, build/ dalle versioni con build IDF nativa):
+# cerchiamo i binari invece di assumere il layout.
+BUILD_DIR=".esphome/build/${NAME}"
+OTA_BIN=$(find "$BUILD_DIR" -name firmware.ota.bin -print -quit)
+FACTORY_BIN=$(find "$BUILD_DIR" -name firmware.factory.bin -print -quit)
+if [ -z "$OTA_BIN" ] || [ -z "$FACTORY_BIN" ]; then
+  echo "ERRORE: firmware.ota.bin/firmware.factory.bin non trovati sotto ${BUILD_DIR}" >&2
+  find "$BUILD_DIR" -name '*.bin' >&2 || true
+  exit 1
+fi
+
 OUT="output/${VARIANT}"
 mkdir -p "$OUT"
 
-cp "${BUILD_DIR}/firmware.ota.bin" "$OUT/firmware.ota.bin"
-cp "${BUILD_DIR}/firmware.factory.bin" "$OUT/firmware.factory.bin"
+cp "$OTA_BIN" "$OUT/firmware.ota.bin"
+cp "$FACTORY_BIN" "$OUT/firmware.factory.bin"
 
 MD5=$(md5sum "$OUT/firmware.ota.bin" | cut -d' ' -f1)
 
