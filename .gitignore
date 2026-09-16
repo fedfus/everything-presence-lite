@@ -1,0 +1,11 @@
+
+.DS_Store
+Gemfile.lock
+_site
+.esphome
+secrets.yaml
+# config locali per-device (non pubblicare: contengono URL OTA reali)
+epl-*.yaml
+# memoria locale Claude (non committare)
+CLAUDE.md
+memory/

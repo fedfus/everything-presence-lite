@@ -1,0 +1,342 @@
+type: custom:plotly-graph
+title: $ex "EPL Map" # <-- CHANGE THIS
+refresh_interval: 1
+hours_to_show: current_day
+
+config:
+  modeBarButtonsToRemove:
+    - select2d
+    - lasso2d
+    - toImage
+  displaylogo: false
+
+entities:
+  # ---------------------------
+  # INIT / HELPERS (EDIT base)
+  # ---------------------------
+  - entity: ""
+    base: $ex vars.base = "<yoursensornamehere>";  # <-- CHANGE THIS
+    sensor_prefix: $ex vars.sensor_name_prefix = "sensor." + vars.base + "_";
+    number_prefix: $ex vars.number_name_prefix = "number." + vars.base + "_";
+    text_prefix: $ex vars.text_name_prefix = "text." + vars.base + "_";
+    switch_prefix: $ex vars.switch_name_prefix = "switch." + vars.base + "_";
+
+    helpers: >-
+      $ex {
+        // safe numeric read
+        vars.num = (entity_id, fallback = -9999) => {
+          const s = hass.states[entity_id];
+          if (!s) return fallback;
+          const n = Number(s.state);
+          return Number.isNaN(n) ? fallback : n;
+        };
+
+        // unit detection (imperial => often "in")
+        const u = hass.states[vars.sensor_name_prefix + "target_1_x"]?.attributes?.unit_of_measurement;
+        vars.is_inch_unit = !!u && String(u).toLowerCase().startsWith("in");
+
+        // polygon mode toggle
+        vars.polygon_mode = (hass.states[vars.switch_name_prefix + "polygon_zones"]?.state === "on");
+
+        // Parse: "-100:3200;2300:3200;..."
+        vars.parse_polygon = (txt) => {
+          const x = [], y = [];
+          const parts = String(txt || "").split(";").map(p => p.trim()).filter(Boolean);
+          for (const p of parts) {
+            const [sx, sy] = p.split(":");
+            const px = Number(sx), py = Number(sy);
+            if (!Number.isNaN(px) && !Number.isNaN(py)) { x.push(px); y.push(py); }
+          }
+          if (x.length < 3) return { x: [-9999], y: [-9999] };
+          x.push(x[0]); y.push(y[0]); // close polygon
+          return { x, y };
+        };
+
+        vars.poly = (suffix) => {
+          const e = hass.states[vars.text_name_prefix + suffix];
+          return vars.parse_polygon(e?.state);
+        };
+      }
+
+  # ---------------------------
+  # TARGETS
+  # ---------------------------
+  - entity: ""
+    name: Target1
+    marker:
+      size: 10
+      symbol: star-diamond
+    line:
+      shape: spline
+      width: 5
+    x:
+      - >-
+        $ex {
+          let x = vars.num(vars.sensor_name_prefix + "target_1_x");
+          let y = vars.num(vars.sensor_name_prefix + "target_1_y");
+          if (x === -9999 || y === -9999 || (x == 0 && y == 0)) return -9999;
+          if (vars.is_inch_unit) x = x * 25.4;
+          return x;
+        }
+    "y":
+      - >-
+        $ex {
+          let x = vars.num(vars.sensor_name_prefix + "target_1_x");
+          let y = vars.num(vars.sensor_name_prefix + "target_1_y");
+          if (x === -9999 || y === -9999 || (x == 0 && y == 0)) return -9999;
+          if (vars.is_inch_unit) y = y * 25.4;
+          return y;
+        }
+
+  - entity: ""
+    name: Target2
+    marker:
+      size: 10
+      symbol: star-diamond
+    line:
+      shape: spline
+      width: 5
+    x:
+      - >-
+        $ex {
+          let x = vars.num(vars.sensor_name_prefix + "target_2_x");
+          let y = vars.num(vars.sensor_name_prefix + "target_2_y");
+          if (x === -9999 || y === -9999 || (x == 0 && y == 0)) return -9999;
+          if (vars.is_inch_unit) x = x * 25.4;
+          return x;
+        }
+    "y":
+      - >-
+        $ex {
+          let x = vars.num(vars.sensor_name_prefix + "target_2_x");
+          let y = vars.num(vars.sensor_name_prefix + "target_2_y");
+          if (x === -9999 || y === -9999 || (x == 0 && y == 0)) return -9999;
+          if (vars.is_inch_unit) y = y * 25.4;
+          return y;
+        }
+
+  - entity: ""
+    name: Target3
+    marker:
+      size: 10
+      symbol: star-diamond
+    line:
+      shape: spline
+      width: 5
+    x:
+      - >-
+        $ex {
+          let x = vars.num(vars.sensor_name_prefix + "target_3_x");
+          let y = vars.num(vars.sensor_name_prefix + "target_3_y");
+          if (x === -9999 || y === -9999 || (x == 0 && y == 0)) return -9999;
+          if (vars.is_inch_unit) x = x * 25.4;
+          return x;
+        }
+    "y":
+      - >-
+        $ex {
+          let x = vars.num(vars.sensor_name_prefix + "target_3_x");
+          let y = vars.num(vars.sensor_name_prefix + "target_3_y");
+          if (x === -9999 || y === -9999 || (x == 0 && y == 0)) return -9999;
+          if (vars.is_inch_unit) y = y * 25.4;
+          return y;
+        }
+
+  # ---------------------------
+  # ZONES (polygon-mode OR rectangle-mode)
+  # ---------------------------
+  - entity: ""
+    name: Zone1
+    mode: lines
+    fill: toself
+    fillcolor: RGBA(20,200,0,0.06)
+    line:
+      color: RGBA(20,200,0,0.2)
+      shape: line
+      width: 2
+    x: >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_zone_1").x;
+        const bx = vars.num(vars.number_name_prefix + "zone_1_begin_x");
+        const ex = vars.num(vars.number_name_prefix + "zone_1_end_x");
+        return [bx, bx, ex, ex, bx];
+      }
+    "y": >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_zone_1").y;
+        const by = vars.num(vars.number_name_prefix + "zone_1_begin_y");
+        const ey = vars.num(vars.number_name_prefix + "zone_1_end_y");
+        return [by, ey, ey, by, by];
+      }
+
+  - entity: ""
+    name: Zone2
+    mode: lines
+    fill: toself
+    fillcolor: RGBA(200,0,255,0.06)
+    line:
+      color: RGBA(200,0,255,0.2)
+      shape: line
+      width: 2
+    x: >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_zone_2").x;
+        const bx = vars.num(vars.number_name_prefix + "zone_2_begin_x");
+        const ex = vars.num(vars.number_name_prefix + "zone_2_end_x");
+        return [bx, bx, ex, ex, bx];
+      }
+    "y": >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_zone_2").y;
+        const by = vars.num(vars.number_name_prefix + "zone_2_begin_y");
+        const ey = vars.num(vars.number_name_prefix + "zone_2_end_y");
+        return [by, ey, ey, by, by];
+      }
+
+  - entity: ""
+    name: Zone3
+    mode: lines
+    fill: toself
+    fillcolor: RGBA(200,120,55,0.06)
+    line:
+      color: RGBA(200,120,55,0.2)
+      shape: line
+      width: 2
+    x: >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_zone_3").x;
+        const bx = vars.num(vars.number_name_prefix + "zone_3_begin_x");
+        const ex = vars.num(vars.number_name_prefix + "zone_3_end_x");
+        return [bx, bx, ex, ex, bx];
+      }
+    "y": >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_zone_3").y;
+        const by = vars.num(vars.number_name_prefix + "zone_3_begin_y");
+        const ey = vars.num(vars.number_name_prefix + "zone_3_end_y");
+        return [by, ey, ey, by, by];
+      }
+
+  - entity: ""
+    name: Zone4
+    mode: lines
+    fill: toself
+    fillcolor: RGBA(255,0,0,0.15)
+    line:
+      color: RGBA(255,0,0,0.2)
+      shape: line
+      width: 1
+    x: >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_zone_4").x;
+        const bx = vars.num(vars.number_name_prefix + "zone_4_begin_x");
+        const ex = vars.num(vars.number_name_prefix + "zone_4_end_x");
+        return [bx, bx, ex, ex, bx];
+      }
+    "y": >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_zone_4").y;
+        const by = vars.num(vars.number_name_prefix + "zone_4_begin_y");
+        const ey = vars.num(vars.number_name_prefix + "zone_4_end_y");
+        return [by, ey, ey, by, by];
+      }
+
+  # ---------------------------
+  # OCCUPANCY MASK 1 (polygon exclusion if present)
+  # ---------------------------
+  - entity: ""
+    name: OccupancyMask1
+    mode: lines
+    fill: toself
+    fillcolor: RGBA(20,20,20,0.06)
+    line:
+      color: RGBA(20,20,20,0.2)
+      shape: line
+      width: 2
+    x: >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_exclusion_1").x;
+        const bx = vars.num(vars.number_name_prefix + "occupancy_mask_1_begin_x");
+        const ex = vars.num(vars.number_name_prefix + "occupancy_mask_1_end_x");
+        return [bx, bx, ex, ex, bx];
+      }
+    "y": >-
+      $ex {
+        if (vars.polygon_mode) return vars.poly("polygon_exclusion_1").y;
+        const by = vars.num(vars.number_name_prefix + "occupancy_mask_1_begin_y");
+        const ey = vars.num(vars.number_name_prefix + "occupancy_mask_1_end_y");
+        return [by, ey, ey, by, by];
+      }
+
+  # ---------------------------
+  # COVERAGE (safe reads)
+  # ---------------------------
+  - entity: ""
+    name: Coverage
+    mode: lines
+    fill: tonexty
+    fillcolor: rgba(168, 216, 234, 0.15)
+    line:
+      shape: line
+      width: 1
+      dash: dot
+    x: >-
+      $ex {
+        vars.installation_angle = Number(hass.states[vars.number_name_prefix + "installation_angle"]?.state ?? 0);
+        vars.installation_angle_cos = Math.cos(Math.PI/180 * vars.installation_angle);
+        vars.installation_angle_sin = Math.sin(Math.PI/180 * vars.installation_angle);
+
+        const md_cm = vars.num(vars.number_name_prefix + "max_distance", 0);
+        vars.max_distance = 10 * md_cm; // cm -> mm (matches original card)
+
+        const distance_ratio = (vars.max_distance || 1) / 7500;
+        const coverage_steps = [5500,4500,4000,3000,2000,1000,0,-1000,-2000,-3000,-4000,-4500,-5500];
+
+        vars.coverage_x = [0, vars.max_distance * Math.sin(Math.PI/180 * 60)];
+        coverage_steps.forEach((step) => vars.coverage_x.push(step * distance_ratio));
+        vars.coverage_x.push(-vars.max_distance * Math.sin(Math.PI/180 * 60), 0);
+
+        vars.coverage_y = [0, vars.max_distance * Math.cos(Math.PI/180 * 60)];
+        coverage_steps.forEach((step) => vars.coverage_y.push(Math.sqrt(Math.max(0, vars.max_distance**2 - (step * distance_ratio)**2))));
+        vars.coverage_y.push(vars.max_distance * Math.cos(Math.PI/180 * 60), 0);
+
+        return vars.coverage_x.map((x, i) => x * vars.installation_angle_cos + vars.coverage_y[i] * vars.installation_angle_sin);
+      }
+    "y": >-
+      $ex vars.coverage_y.map((y,i)=> (-vars.coverage_x[i] * vars.installation_angle_sin + y * vars.installation_angle_cos))
+
+layout:
+  height: 240
+  margin:
+    l: 40
+    r: 20
+    t: 20
+    b: 55
+  showlegend: false
+  xaxis:
+    showticklabels: false
+    dtick: 1000
+    gridcolor: RGBA(200,200,200,0.15)
+    zerolinecolor: RGBA(200,200,200,0.15)
+    type: number
+    fixedrange: true
+    range:
+      - $ex -vars.max_distance
+      - $ex vars.max_distance
+  yaxis:
+    showticklabels: false
+    dtick: 1000
+    gridcolor: RGBA(200,200,200,0.15)
+    zerolinecolor: RGBA(200,200,200,0.15)
+    scaleanchor: x
+    scaleratio: 1
+    fixedrange: true
+    range:
+      - $ex vars.max_distance
+      - >-
+        $ex {
+          if (Math.abs(vars.installation_angle) <= 30) return 0;
+          return -vars.max_distance * Math.sin(Math.PI/180 * (Math.abs(vars.installation_angle)-30));
+        }
+
+raw_plotly_config: true

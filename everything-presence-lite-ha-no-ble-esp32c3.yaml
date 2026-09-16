@@ -1,0 +1,45 @@
+substitutions:
+  name: "everything-presence-lite"
+  friendly_name: "Everything Presence Lite"
+  illuminance_update_interval: "2s"
+  hidden_ssid: "false"
+  log_level: DEBUG
+
+  # --- Fork (fedfus) ---------------------------------------------------------
+  # Bump fork_version to publish a new OTA release to the devices.
+  # Convention: <upstream project version>+c3.<n>
+  fork_version: "1.5.0+c3.1"
+  # Placeholder: l'URL reale viene iniettato dalla pipeline GitLab
+  # (esphome -s ota_base_url $CI_PAGES_URL). Non committare URL privati qui.
+  ota_base_url: "http://ota.invalid/everything-presence-lite"
+  # ---------------------------------------------------------------------------
+
+  device_config:
+    ethernet_enabled: false
+    co2_enabled: false
+    bluetooth_enabled: false
+    board_revision: "1.2"
+    sensor_variant: "ld2450"
+    firmware_channel: "stable"
+    model: "everything-presence-lite-esp32c3"
+
+esphome:
+  project:
+    version: ${fork_version}
+
+update:
+  - platform: http_request
+    id: update_http_request
+    name: Everything Presence Lite Firmware
+    source: ${ota_base_url}/everything-presence-lite-ha-no-ble-esp32c3/manifest.json
+    disabled_by_default: true
+    update_interval: 6h
+
+dashboard_import:
+  package_import_url: github://fedfus/everything-presence-lite/everything-presence-lite-ha-no-ble-esp32c3.yaml@main
+  import_full_config: false
+
+packages:
+  device_base: !include common/everything-presence-lite-base.yaml
+  ld2450_base: !include common/ld2450-base.yaml
+  esp32c3_overlay: !include common/esp32c3-overlay.yaml

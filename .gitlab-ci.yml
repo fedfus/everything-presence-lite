@@ -1,0 +1,111 @@
+# =============================================================================
+# Pipeline GitLab (self-hosted) — build firmware ESP32-C3 + pubblicazione OTA
+# -----------------------------------------------------------------------------
+# - validate : `esphome config` su ogni variante (tutti i branch/MR)
+# - build    : `esphome compile` + packaging firmware/manifest (solo main/tag)
+# - pages    : pubblica firmware + manifest.json su GitLab Pages
+#
+# I dispositivi fanno OTA leggendo:
+#   <GitLab Pages URL>/<variante>/manifest.json
+# (vedi substitution `ota_base_url` nei file *-esp32c3.yaml)
+#
+# Requisiti sull'istanza GitLab:
+# - runner con executor docker e accesso internet (toolchain platformio)
+# - GitLab Pages abilitato, con access control DISATTIVATO per questo
+#   progetto (Settings > General > Visibility: Pages "Everyone"), perché
+#   i device ESPHome non possono autenticarsi.
+# =============================================================================
+
+stages:
+  - validate
+  - build
+  - deploy
+
+variables:
+  PLATFORMIO_CORE_DIR: "$CI_PROJECT_DIR/.platformio"
+
+.esphome-variant:
+  image:
+    name: ghcr.io/esphome/esphome:stable
+    entrypoint: [""]
+  parallel:
+    matrix:
+      - VARIANT:
+          - everything-presence-lite-ha-esp32c3
+          - everything-presence-lite-ha-no-ble-esp32c3
+
+validate:
+  stage: validate
+  extends: .esphome-variant
+  script:
+    - esphome config "${VARIANT}.yaml" > /dev/null
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH'
+
+build:
+  stage: build
+  extends: .esphome-variant
+  cache:
+    key: "esphome-${VARIANT}"
+    paths:
+      - .esphome/
+      - .platformio/
+  script:
+    # L'URL OTA reale non e' mai committato: viene iniettato qui.
+    # Default: URL Pages del progetto; override con la variabile CI OTA_BASE_URL.
+    # La versione firmware e' automatica: <versione upstream>+c3.<numero pipeline>,
+    # cosi' ogni build pubblicata risulta "nuova" per l'update entity dei device.
+    - UP_VER=$(sed -n 's/.*version:[ ]*"\([0-9.]*\)".*/\1/p' common/everything-presence-lite-base.yaml | head -1)
+    - esphome -s ota_base_url "${OTA_BASE_URL:-$CI_PAGES_URL}" -s fork_version "${UP_VER}+c3.${CI_PIPELINE_IID}" compile "${VARIANT}.yaml"
+    - bash scripts/gitlab/package-firmware.sh "${VARIANT}"
+  artifacts:
+    paths:
+      - output/
+    expire_in: 4 weeks
+  rules:
+    # niente rebuild dalle pipeline schedulate: si builda solo su push reale
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "main"'
+    - if: '$CI_COMMIT_TAG'
+
+pages:
+  stage: deploy
+  image: alpine:latest
+  needs: ["build"]
+  script:
+    - apk add --no-cache bash 
+    - mkdir -p public
+    - cp -r output/* public/
+    - bash scripts/gitlab/generate-index.sh public
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+      when: never
+    - if: '$CI_COMMIT_BRANCH == "main"'
+
+# Job schedulato (Settings > CI/CD > Pipeline schedules, es. giornaliero):
+# pulla il main dal fork GitHub (a sua volta sincronizzato dall'upstream via
+# GitHub Action) e lo pusha su questo repo. Il push fa partire build+pages.
+# Richiede la variabile CI/CD GITLAB_PUSH_TOKEN (project access token,
+# ruolo Maintainer, scope write_repository, masked).
+sync-github:
+  stage: validate
+  image:
+    name: alpine/git:latest
+    entrypoint: [""]
+  variables:
+    GIT_STRATEGY: clone
+    GIT_DEPTH: "0"
+  script:
+    - git remote add github https://github.com/fedfus/everything-presence-lite.git
+    - git fetch github main
+    - '[ "$(git rev-list --count HEAD..github/main)" = "0" ] && echo "Già allineato" && exit 0'
+    - git push "https://oauth2:${GITLAB_PUSH_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}.git" github/main:main
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
