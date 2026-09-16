@@ -46,13 +46,23 @@ uart:
       input: true
       pullup: true
 
-# The upstream flash/factory-reset button sits on GPIO0. On the XIAO the
-# BOOT button is GPIO9 instead; uncomment to use it:
-# binary_sensor:
-#   - id: !extend flash_button
+# The upstream flash/factory-reset button sits on GPIO0 with
+# ignore_strapping_warning: true (GPIO0 IS a strapping pin on the classic
+# ESP32). On the C3 the strapping pins are GPIO2/8/9, so that flag makes
+# validation fail ("GPIO0 is not a strapping pin") and must be overridden.
+binary_sensor:
+  - id: !extend flash_button
+    pin:
+      number: 0
+      inverted: true
+      ignore_strapping_warning: false
+
+# Alternative: on the XIAO the BOOT button is GPIO9 (which IS strapping on
+# the C3). To use it instead of GPIO0, replace the pin above with:
 #     pin:
 #       number: 9
 #       inverted: true
+#       ignore_strapping_warning: true
 #       mode:
 #         input: true
 #         pullup: true
